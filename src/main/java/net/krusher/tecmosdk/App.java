@@ -16,7 +16,7 @@ public class App {
     private static final int MIN_CHARS = 4;
     private static final int CHECKSUM_OFFSET = 398; // 256 + 142
 
-    public static void main( String[] args ) throws IOException {
+    public static void main( String[] args ) throws IOException, InterruptedException {
 
         Log.pnl("TecmoSDK by Krusher - Programa bajo licencia GPL 3");
 
@@ -95,10 +95,12 @@ public class App {
         return false;
     }
 
-    private static void inject(String file) throws IOException {
+    private static void inject(String file) throws IOException, InterruptedException {
         Log.pnl("Modo: Inyectar:");
         Log.pnl("Leyendo archivo: " + file);
         byte[] fileData = Files.readAllBytes(Paths.get(file));
+        Log.pnl("Inyectando bloques comprimidos...");
+        injectCompressedBlocks(fileData);
         Log.pnl("Inyectando textos...");
         List<Texticle> texticles = extractTexts(file);
         for (Texticle texticle : texticles) {
@@ -113,7 +115,28 @@ public class App {
         Log.pnl("Salida escrita en: " + outputFile.getAbsolutePath());
     }
 
-    public static List<Texticle> extractTexts(String file) throws IOException {
+    private static void injectCompressedBlocks(byte[] fileData) throws IOException, InterruptedException {
+        // get list of files in dumps_dir directory
+        File[] files = new File("dumps_dir").listFiles();
+        if (files == null || files.length == 0) {
+            Log.pnl("No se encontraron archivos comprimidos en la carpeta 'dumps_dir'");
+            return;
+        }
+        for (File file : files) {
+            if (!file.getName().startsWith("dump_") || file.getName().contains(".cmp.")) {
+                continue;
+            }
+            Log.p(" " + file.getName());
+            execute("cui_lzcaptsu.exe", "dumps_dir\\" + file.getName());
+            String addressHex = file.getName().substring(5, file.getName().lastIndexOf('.'));
+            int addressDecimal = Integer.parseInt(addressHex, 16);
+            byte[] compressedData = Files.readAllBytes(Paths.get("dumps_dir/" + file.getName().replace(".bin", ".cmp.bin")));
+            System.arraycopy(compressedData, 0, fileData, addressDecimal, compressedData.length);
+        }
+        Log.pnl();
+    }
+
+        public static List<Texticle> extractTexts(String file) throws IOException {
         List<String> lines = Files.readAllLines(Paths.get(file + ".txt"));
         List<Texticle> texticles = new ArrayList<>();
         for (String line : lines) {
@@ -169,5 +192,19 @@ public class App {
         Log.pnl("Debe especificarse modo y archivo");
         Log.pnl("Ejemplos: x \"rom a extraer.bin\"");
         Log.pnl("          i \"rom a inyectar.bin\"");
+    }
+
+    public static void execute(String... parameters) throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder(parameters);
+        processBuilder
+                .redirectInput(ProcessBuilder.Redirect.INHERIT)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.INHERIT);
+        Process process = processBuilder.start();
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            Log.pnl("Error al ejecutar el comando: " + exitCode);
+            System.exit(exitCode);
+        }
     }
 }
