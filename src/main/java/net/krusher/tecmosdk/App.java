@@ -8,13 +8,18 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class App {
 
     private static final String TEXT_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?.,0123456789:'\" ";
     private static final int MIN_CHARS = 4;
     private static final int CHECKSUM_OFFSET = 398; // 256 + 142
+
+    private static final Map<Integer, LogData> logData = new HashMap<>();
 
     public static void main( String[] args ) throws IOException, InterruptedException {
 
@@ -28,8 +33,10 @@ public class App {
 
         // check mode
         if (args[0].equals("x")) {
+            loadLogData();
             extract(args[1]);
         } else if (args[0].equals("i")) {
+            loadLogData();
             inject(args[1]);
         } else {
             printUsage();
@@ -63,6 +70,15 @@ public class App {
         }
 
         printWriter.close();
+    }
+
+    private static void loadLogData() throws IOException {
+        File logFile = new File("dumps_dir/data.log");
+        List<String> lines = Files.readAllLines(logFile.toPath());
+        for (String line : lines) {
+            LogData logLine = LogData.parseLine(line);
+            logData.put(logLine.offset(), logLine);
+        }
     }
 
     public static List<Texticle> extractTexts(byte[] fileData) {
@@ -131,7 +147,18 @@ public class App {
             String addressHex = file.getName().substring(5, file.getName().lastIndexOf('.'));
             int addressDecimal = Integer.parseInt(addressHex, 16);
             byte[] compressedData = Files.readAllBytes(Paths.get("dumps_dir/" + file.getName().replace(".bin", ".cmp.bin")));
+            LogData logLine = logData.get(addressDecimal);
+            if (logLine.compressedSize() < compressedData.length) {
+                Log.pnl("El tamaño del bloque comprimido es mayor que el tamaño original, no se inyectará");
+                continue;
+            }
             System.arraycopy(compressedData, 0, fileData, addressDecimal, compressedData.length);
+            if (logLine.compressedSize() > compressedData.length) {
+                Log.pnl("El tamaño del bloque comprimido es menor que el tamaño original, se rellenará con ceros");
+                byte[] padding = new byte[logLine.compressedSize() - compressedData.length - 1];
+                Arrays.fill(padding, (byte) 0x00);
+                System.arraycopy(padding, 0, fileData, addressDecimal + compressedData.length, padding.length);
+            }
         }
         Log.pnl();
     }
