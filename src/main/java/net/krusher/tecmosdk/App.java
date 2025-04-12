@@ -93,13 +93,23 @@ public class App {
                 length++;
             } else if (inText) {
                 if (length > MIN_CHARS) {
-                    texts.add(new Texticle(i - length, length, buffer.toString()));
+                    Integer pointerAddress = getPointerAddress(fileData, i - length);
+                    texts.add(new Texticle(i - length, length, buffer.toString(), pointerAddress));
                 }
                 length = 0;
                 buffer = new StringBuilder();
             }
         }
         return texts;
+    }
+
+    private static Integer getPointerAddress(byte[] fileData, int address) {
+        for (int i = 0; i < fileData.length - 3; i++) {
+            if (fileData[i] == (byte) (address >> 16) && fileData[i + 1] == (byte) (address >> 8) && fileData[i + 2] == (byte) address) {
+                return i;
+            }
+        }
+        return null;
     }
 
     private static boolean isChar(byte fileDatum) {
@@ -172,14 +182,18 @@ public class App {
         List<Texticle> texticles = new ArrayList<>();
         for (String line : lines) {
             String[] parts = line.split("#");
-            if (parts.length == 3) {
+            if (parts.length > 2) {
                 int address = Integer.parseInt(parts[0]);
                 int size = Integer.parseInt(parts[1]);
                 String text = parts[2];
                 if (text.length() > size) {
                     text = text.substring(0, size);
                 }
-                texticles.add(new Texticle(address, size, text));
+                Integer pointerAddress = null;
+                if (parts.length == 4) {
+                    pointerAddress = Integer.parseInt(parts[3]);
+                }
+                texticles.add(new Texticle(address, size, text, pointerAddress));
             }
         }
         return texticles;
