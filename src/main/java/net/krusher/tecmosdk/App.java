@@ -143,27 +143,31 @@ public class App {
                 continue;
             }
             Log.p(" " + file.getName());
-            execute("cui_lzcaptsu.exe", "dumps_dir\\" + file.getName());
+            execute("lzcaptsu.exe", "dumps_dir\\" + file.getName(), "temp.bin", "e");
             String addressHex = file.getName().substring(5, file.getName().lastIndexOf('.'));
             int addressDecimal = Integer.parseInt(addressHex, 16);
-            byte[] compressedData = Files.readAllBytes(Paths.get("dumps_dir/" + file.getName().replace(".bin", ".cmp.bin")));
+            byte[] compressedData = Files.readAllBytes(Paths.get("temp.bin"));
             LogData logLine = logData.get(addressDecimal);
             if (logLine.compressedSize() < compressedData.length) {
-                Log.pnl("El tamaño del bloque comprimido es mayor que el tamaño original, no se inyectará");
+                Log.p(" El tamaño del bloque comprimido es mayor que el tamaño original, no se inyectará. ");
                 continue;
             }
-            System.arraycopy(compressedData, 0, fileData, addressDecimal, compressedData.length);
+            slowCopy(compressedData, 0, fileData, addressDecimal, compressedData.length);
             if (logLine.compressedSize() > compressedData.length) {
-                Log.pnl("El tamaño del bloque comprimido es menor que el tamaño original, se rellenará con ceros");
+                //Log.p(" El tamaño del bloque comprimido es menor que el tamaño original, se rellenará con ceros. ");
                 byte[] padding = new byte[logLine.compressedSize() - compressedData.length - 1];
                 Arrays.fill(padding, (byte) 0x00);
-                System.arraycopy(padding, 0, fileData, addressDecimal + compressedData.length, padding.length);
+                slowCopy(padding, 0, fileData, addressDecimal + compressedData.length, padding.length);
             }
         }
         Log.pnl();
     }
 
-        public static List<Texticle> extractTexts(String file) throws IOException {
+    public static void slowCopy(byte[] src, int srcPos, byte[] dest, int destPos, int length) {
+        System.arraycopy(src, srcPos, dest, destPos, length);
+    }
+
+    public static List<Texticle> extractTexts(String file) throws IOException {
         List<String> lines = Files.readAllLines(Paths.get(file + ".txt"));
         List<Texticle> texticles = new ArrayList<>();
         for (String line : lines) {

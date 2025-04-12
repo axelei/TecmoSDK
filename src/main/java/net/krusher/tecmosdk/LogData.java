@@ -5,7 +5,7 @@ public record LogData (int offset, int compressedSize, int uncompressedSize){
     public static LogData parseLine(String line) {
         //03C1B3 (01302 / 08192)
         String[] parts = line.split(" ");
-        if (parts.length < 2) {
+        if (parts.length < 3) {
             throw new IllegalArgumentException("Invalid line format: " + line);
         }
         String offsetStr = parts[0];
