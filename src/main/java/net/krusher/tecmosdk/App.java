@@ -19,6 +19,8 @@ public class App {
     private static final int MIN_CHARS = 4;
     private static final int CHECKSUM_OFFSET = 398; // 256 + 142
 
+    private static int freeSpacePointer = 524290;
+
     private static final Map<Integer, LogData> logData = new HashMap<>();
 
     public static void main( String[] args ) throws IOException, InterruptedException {
@@ -124,14 +126,16 @@ public class App {
     private static void inject(String file) throws IOException, InterruptedException {
         Log.pnl("Modo: Inyectar:");
         Log.pnl("Leyendo archivo: " + file);
-        byte[] fileData = Files.readAllBytes(Paths.get(file));
-        Log.pnl("Inyectando bloques comprimidos...");
-        injectCompressedBlocks(fileData);
+        byte[] rom = Files.readAllBytes(Paths.get(file));
+        byte[] fileData = new byte[rom.length * 2];
+        System.arraycopy(rom, 0, fileData, 0, rom.length);
         Log.pnl("Inyectando textos...");
         List<Texticle> texticles = extractTexts(file);
         for (Texticle texticle : texticles) {
             System.arraycopy(texticle.toAsciiBytes(), 0, fileData, texticle.address(), texticle.size());
         }
+        Log.pnl("Inyectando bloques comprimidos...");
+        injectCompressedBlocks(fileData);
         Log.pnl("Inyección terminada.");
         Log.pnl("Arreglando checksum...");
         fixChecksum(fileData);
@@ -142,14 +146,13 @@ public class App {
     }
 
     private static void injectCompressedBlocks(byte[] fileData) throws IOException, InterruptedException {
-        // get list of files in dumps_dir directory
         File[] files = new File("dumps_dir").listFiles();
         if (files == null || files.length == 0) {
             Log.pnl("No se encontraron archivos comprimidos en la carpeta 'dumps_dir'");
             return;
         }
         for (File file : files) {
-            if (!file.getName().startsWith("dump_") || file.getName().contains(".cmp.")) {
+            if (!file.getName().startsWith("dump_") || !file.getName().endsWith("bin") || file.getName().contains(".cmp.")) {
                 continue;
             }
             Log.p(" " + file.getName());
@@ -159,22 +162,30 @@ public class App {
             byte[] compressedData = Files.readAllBytes(Paths.get("temp.bin"));
             LogData logLine = logData.get(addressDecimal);
             if (logLine.compressedSize() < compressedData.length) {
-                Log.p(" El tamaño del bloque comprimido es mayor que el tamaño original, no se inyectará. ");
-                continue;
+                Log.p(" El tamaño del bloque comprimido es mayor que el tamaño original. ");
+                Integer pointer = getPointerAddress(fileData, addressDecimal);
+                if (pointer != null) {
+                    Log.p(" Se moverá a otro espacio. ");
+                    byte[] padding = new byte[logLine.compressedSize()];
+                    Arrays.fill(padding, (byte) 0x00);
+                    System.arraycopy(padding, 0, fileData, addressDecimal, padding.length);
+                    writeThreeBytes(fileData, pointer, freeSpacePointer);
+                    addressDecimal = freeSpacePointer;
+                    freeSpacePointer += compressedData.length + 1;
+                } else {
+                    Log.p(" No se inyectará. ");
+                    continue;
+                }
             }
-            slowCopy(compressedData, 0, fileData, addressDecimal, compressedData.length);
+            System.arraycopy(compressedData, 0, fileData, addressDecimal, compressedData.length);
             if (logLine.compressedSize() > compressedData.length) {
                 //Log.p(" El tamaño del bloque comprimido es menor que el tamaño original, se rellenará con ceros. ");
                 byte[] padding = new byte[logLine.compressedSize() - compressedData.length - 1];
                 Arrays.fill(padding, (byte) 0x00);
-                slowCopy(padding, 0, fileData, addressDecimal + compressedData.length, padding.length);
+                System.arraycopy(padding, 0, fileData, addressDecimal + compressedData.length, padding.length);
             }
         }
         Log.pnl();
-    }
-
-    public static void slowCopy(byte[] src, int srcPos, byte[] dest, int destPos, int length) {
-        System.arraycopy(src, srcPos, dest, destPos, length);
     }
 
     public static List<Texticle> extractTexts(String file) throws IOException {
@@ -231,6 +242,12 @@ public class App {
     private static void writeWord(byte[] data, int offset, int value) {
         data[offset] = (byte) ((value >> 8) & 0xFF);
         data[offset + 1] = (byte) (value & 0xFF);
+    }
+
+    private static void writeThreeBytes(byte[] data, int offset, int value) {
+        data[offset] = (byte) ((value >> 16) & 0xFF);
+        data[offset + 1] = (byte) ((value >> 8) & 0xFF);
+        data[offset + 2] = (byte) (value & 0xFF);
     }
 
     private static void printUsage() {
