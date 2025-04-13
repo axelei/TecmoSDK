@@ -15,7 +15,7 @@ import java.util.Map;
 
 public class App {
 
-    private static final String TEXT_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?.,0123456789:'\" ";
+    private static final String TEXT_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?.,0123456789:='\" ";
     private static final int MIN_CHARS = 4;
     private static final int CHECKSUM_OFFSET = 398; // 256 + 142
 
