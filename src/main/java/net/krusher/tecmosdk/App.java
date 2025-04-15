@@ -1,5 +1,7 @@
 package net.krusher.tecmosdk;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -12,11 +14,12 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class App {
 
-    private static final String TEXT_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?.,0123456789:='\" ";
-    private static final int MIN_CHARS = 4;
+    private static final String TEXT_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?*.,0123456789:-='\" ";
+    private static final int MIN_CHARS = 2;
     private static final int CHECKSUM_OFFSET = 398; // 256 + 142
 
     private static int freeSpacePointer = 524290;
@@ -94,7 +97,7 @@ public class App {
                 buffer.append((char) fileData[i]);
                 length++;
             } else if (inText) {
-                if (length > MIN_CHARS) {
+                if (length > MIN_CHARS && StringUtils.isAsciiPrintable(buffer.toString()) && StringUtils.isNotBlank(buffer.toString())) {
                     Integer pointerAddress = getPointerAddress(fileData, i - length);
                     texts.add(new Texticle(i - length, length, buffer.toString(), pointerAddress));
                 }
@@ -132,7 +135,7 @@ public class App {
         Log.pnl("Inyectando textos...");
         List<Texticle> texticles = extractTexts(file);
         for (Texticle texticle : texticles) {
-            System.arraycopy(texticle.toAsciiBytes(), 0, fileData, texticle.address(), texticle.size());
+            injectTexticle(texticle, fileData);
         }
         Log.pnl("Inyectando bloques comprimidos...");
         injectCompressedBlocks(fileData);
@@ -143,6 +146,33 @@ public class App {
         File outputFile = new File(file + ".patched.bin");
         Files.write(outputFile.toPath(), fileData);
         Log.pnl("Salida escrita en: " + outputFile.getAbsolutePath());
+    }
+
+    private static void injectTexticle(Texticle texticle, byte[] fileData) {
+        int address = texticle.address();
+        if (texticle.text().length() > texticle.room()) {
+            Log.p(" El tamaño del texto \"{0}\" es mayor que el tamaño del bloque. ", texticle.text());
+            Integer pointer = getPointerAddress(fileData, address);
+            if (Objects.isNull(pointer)) {
+                Log.pnl(" No se inyectará. ");
+                return;
+            }
+            Log.pnl(" Se moverá a otro espacio. ");
+            byte[] padding = new byte[texticle.room()];
+            Arrays.fill(padding, (byte) 0x00);
+            System.arraycopy(padding, 0, fileData, address, padding.length);
+            writeThreeBytes(fileData, pointer, freeSpacePointer);
+            address = freeSpacePointer;
+            freeSpacePointer += texticle.text().length() + 2;
+        }
+
+        System.arraycopy(texticle.toAsciiBytes(), 0, fileData, address, texticle.toAsciiBytes().length);
+        if (texticle.text().length() < texticle.room()) {
+            // Log.p(" El tamaño del texto es menor que el tamaño del bloque, rellenando con ceros. ");
+            byte[] padding = new byte[texticle.room() - texticle.text().length()];
+            Arrays.fill(padding, (byte) 0x00);
+            System.arraycopy(padding, 0, fileData, address + texticle.text().length(), padding.length);
+        }
     }
 
     private static void injectCompressedBlocks(byte[] fileData) throws IOException, InterruptedException {
@@ -171,7 +201,7 @@ public class App {
                     System.arraycopy(padding, 0, fileData, addressDecimal, padding.length);
                     writeThreeBytes(fileData, pointer, freeSpacePointer);
                     addressDecimal = freeSpacePointer;
-                    freeSpacePointer += compressedData.length + 1;
+                    freeSpacePointer += compressedData.length + 2;
                 } else {
                     Log.p(" No se inyectará. ");
                     continue;
@@ -197,9 +227,6 @@ public class App {
                 int address = Integer.parseInt(parts[0]);
                 int size = Integer.parseInt(parts[1]);
                 String text = parts[2];
-                if (text.length() > size) {
-                    text = text.substring(0, size);
-                }
                 Integer pointerAddress = null;
                 if (parts.length == 4) {
                     pointerAddress = Integer.parseInt(parts[3]);
