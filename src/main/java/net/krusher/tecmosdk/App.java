@@ -3,6 +3,7 @@ package net.krusher.tecmosdk;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -15,12 +16,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class App {
 
     private static final String TEXT_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?*.,0123456789:-='\" ";
     private static final int MIN_CHARS = 2;
     private static final int CHECKSUM_OFFSET = 398; // 256 + 142
+    private static final Set<Range> UNCOMPRESSED_BINS = Set.of(Range.of(0x8FEA, 0x95EA));
+    public static final String DUMPS_DIR = "dumps_dir";
 
     private static int freeSpacePointer = 524290;
 
@@ -60,6 +64,8 @@ public class App {
         byte[] fileData = Files.readAllBytes(Paths.get(file));
         Log.pnl("Extrayendo textos...");
         List<Texticle> texts = extractTexts(fileData);
+        Log.pnl("Extrayendo bloques sin comprimir...");
+        extractUncompressedBlock(UNCOMPRESSED_BINS, "bin", fileData);
         Log.pnl("Extracción terminada, escribiendo salida...");
         writeTexts(texts, file);
         Log.pnl("Salida escrita en: " + file + ".txt");
@@ -78,7 +84,7 @@ public class App {
     }
 
     private static void loadLogData() throws IOException {
-        File logFile = new File("dumps_dir/data.log");
+        File logFile = new File(DUMPS_DIR + "/data.log");
         List<String> lines = Files.readAllLines(logFile.toPath());
         for (String line : lines) {
             LogData logLine = LogData.parseLine(line);
@@ -139,6 +145,15 @@ public class App {
         }
         Log.pnl("Inyectando bloques comprimidos...");
         injectCompressedBlocks(fileData);
+        Log.pnl("Inyectando bloques sin comprimir...");
+        File extractedDir = new File(DUMPS_DIR);
+        File[] extractedFiles = extractedDir.listFiles();
+        if (extractedFiles == null || extractedFiles.length == 0) {
+            Log.pnl("No se encontraron archivos sin comprimir en la carpeta '{}'", DUMPS_DIR);
+        } else {
+            injectUncompressedBlocks(extractedFiles, fileData, "bin");
+        }
+        Log.pnl();
         Log.pnl("Inyección terminada.");
         Log.pnl("Arreglando checksum...");
         fixChecksum(fileData);
@@ -176,9 +191,9 @@ public class App {
     }
 
     private static void injectCompressedBlocks(byte[] fileData) throws IOException, InterruptedException {
-        File[] files = new File("dumps_dir").listFiles();
+        File[] files = new File(DUMPS_DIR).listFiles();
         if (files == null || files.length == 0) {
-            Log.pnl("No se encontraron archivos comprimidos en la carpeta 'dumps_dir'");
+            Log.pnl("No se encontraron archivos comprimidos en la carpeta '{1}'", DUMPS_DIR);
             return;
         }
         for (File file : files) {
@@ -186,7 +201,7 @@ public class App {
                 continue;
             }
             Log.p(" " + file.getName());
-            execute("lzcaptsu.exe", "dumps_dir\\" + file.getName(), "temp.bin", "e");
+            execute("lzcaptsu.exe", DUMPS_DIR + "\\" + file.getName(), "temp.bin", "e");
             String addressHex = file.getName().substring(5, file.getName().lastIndexOf('.'));
             int addressDecimal = Integer.parseInt(addressHex, 16);
             byte[] compressedData = Files.readAllBytes(Paths.get("temp.bin"));
@@ -235,6 +250,36 @@ public class App {
             }
         }
         return texticles;
+    }
+
+    public static void injectUncompressedBlocks(File[] extractedFiles, byte[] fileData, String extension) throws IOException {
+        for (File extractedFile : extractedFiles) {
+            if (!extractedFile.getName().startsWith(extension)) {
+                continue;
+            }
+            Log.p(" " + extractedFile.getName());
+            String addressHex = extractedFile.getName().substring(extractedFile.getName().lastIndexOf('_') + 1, extractedFile.getName().lastIndexOf('.'));
+            int addressDecimal = Integer.parseInt(addressHex, 16);
+            byte[] uncompressedData = Files.readAllBytes(Paths.get(extractedFile.getAbsolutePath()));
+            System.arraycopy(uncompressedData, 0, fileData, addressDecimal, uncompressedData.length);
+        }
+    }
+
+    public static void extractUncompressedBlock(Set<Range> ranges, String extension, byte[] fileData) throws IOException {
+        for (Range range : ranges) {
+            int start = range.getFrom();
+            int end = range.getTo();
+            byte[] block = new byte[end - start + 1];
+            System.arraycopy(fileData, start, block, 0, end - start + 1);
+            String fileName = DUMPS_DIR + "/" + extension + "_" + toHexStringPadded(start) + "." + extension;
+            FileOutputStream fos = new FileOutputStream(fileName);
+            fos.write(block);
+            fos.close();
+        }
+    }
+
+    private static String toHexStringPadded(int address) {
+        return StringUtils.leftPad(Integer.toHexString(address), 6, '0');
     }
 
     private static void fixChecksum(byte[] romBytes) {

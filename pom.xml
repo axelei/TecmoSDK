@@ -40,23 +40,34 @@
           <target>${java.version}</target>
         </configuration>
       </plugin>
-      <plugin>
-        <groupId>org.graalvm.buildtools</groupId>
-        <artifactId>native-maven-plugin</artifactId>
-        <version>0.10.6</version>
-        <executions>
-          <execution>
-            <id>native-compile</id>
-            <phase>package</phase>
-            <goals>
-              <goal>compile-no-fork</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <mainClass>net.krusher.tecmosdk.App</mainClass>
-        </configuration>
-      </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>native</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.graalvm.buildtools</groupId>
+            <artifactId>native-maven-plugin</artifactId>
+            <version>0.10.6</version>
+            <executions>
+              <execution>
+                <id>native-compile</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>compile-no-fork</goal>
+                </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <mainClass>net.krusher.tecmosdk.App</mainClass>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
 </project>
