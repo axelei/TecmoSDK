@@ -23,7 +23,7 @@ public class App {
     private static final String TEXT_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?*.,0123456789:-='\" ";
     private static final int MIN_CHARS = 2;
     private static final int CHECKSUM_OFFSET = 398; // 256 + 142
-    private static final Set<Range> UNCOMPRESSED_BINS = Set.of(Range.of(0x8FEA, 0x95EA));
+    private static final Set<Range> UNCOMPRESSED_BINS = Set.of(Range.of(0x8FCA, 0x95EA));
     public static final String DUMPS_DIR = "dumps_dir";
 
     private static int freeSpacePointer = 524290;
